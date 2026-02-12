@@ -59,7 +59,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ order }) => {
             </div>
             {item.notes && (
               <div className="text-[9px] pl-4 italic border-l-2 border-black mt-1">
-                >> {item.notes.toUpperCase()}
+               &gt;&gt; {item.notes.toUpperCase()}
               </div>
             )}
           </div>
