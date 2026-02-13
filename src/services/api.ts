@@ -1,71 +1,58 @@
+import { Product } from '../types'
 
-import { Product, ApiResponse, RawProduct, RawPrice } from '../types';
+const API_URL = 'https://api.litoraltech.com.br/produtos'
 
-const PRODUCTS_URL = 'http://web.chlitoral.com.br:8081/datasnap/rest/TCHAPI/Produto/00000000000001/1/True/True';
-const PRICES_URL = 'http://web.chlitoral.com.br:8081/datasnap/rest/TCHAPI/VendaProduto/00000000000001/1';
-
-const extractDataSnapResult = (data: any): any[] => {
-  if (!data || !data.result) return [];
-  if (Array.isArray(data.result[0])) return data.result[0];
-  if (Array.isArray(data.result)) return data.result;
-  return [];
-};
-
-export const fetchProducts = async (): Promise<{ products: Product[], isFromApi: boolean }> => {
-  const fetchOptions = {
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-    },
-    // Removendo 'mode: no-cors' pois impediria a leitura do JSON. 
-    // O erro 'Failed to fetch' é um problema de CORS no servidor do cliente.
-  };
-
+// ==========================
+// BUSCAR PRODUTOS + GRUPOS
+// ==========================
+export const fetchProducts = async (): Promise<{ products: Product[]; isFromApi: boolean }> => {
   try {
-    const [prodRes, priceRes] = await Promise.all([
-      fetch(PRODUCTS_URL, fetchOptions).then(res => {
-        if (!res.ok) throw new Error('Servidor ERP retornou erro');
-        return res.json();
-      }),
-      fetch(PRICES_URL, fetchOptions).then(res => {
-        if (!res.ok) throw new Error('Servidor de Preços retornou erro');
-        return res.json();
-      })
-    ]);
+    // 1️⃣ Buscar grupos
+    const gruposRes = await fetch(`${API_URL}/grupos`)
+    if (!gruposRes.ok) throw new Error('Erro ao buscar grupos')
+    const grupos = await gruposRes.json()
 
-    const rawProducts = extractDataSnapResult(prodRes) as RawProduct[];
-    const rawPrices = extractDataSnapResult(priceRes) as RawPrice[];
+    const todosProdutos: Product[] = []
 
-    if (rawProducts.length === 0) throw new Error("API vazia");
+    // 2️⃣ Para cada grupo, buscar produtos
+    for (const grupo of grupos) {
+      const produtosRes = await fetch(`${API_URL}?grupo=${grupo.id}`)
+      if (!produtosRes.ok) continue
 
-    const pricesMap = new Map<string, number>();
-    rawPrices.forEach(p => {
-      if (p.IDPRODUTO) pricesMap.set(String(p.IDPRODUTO), Number(p.VALORVENDA));
-    });
+      const produtos = await produtosRes.json()
 
-    const mappedProducts = rawProducts.map(p => ({
-      ID: String(p.IDPRODUTO),
-      DESCRICAO: p.DESCRICAO || 'Produto sem descrição',
-      CATEGORIA: p.CATEGORIA || 'DIVERSOS',
-      PRECO: pricesMap.get(String(p.IDPRODUTO)) || 0,
-      IMAGEM_URL: `https://picsum.photos/seed/${p.IDPRODUTO}/400/300`
-    }));
+      const produtosFormatados: Product[] = produtos.map((p: any) => ({
+        ID: String(p.id),
+        DESCRICAO: p.descricao || '',
+        CATEGORIA: grupo.descricao || 'GERAL',
+        PRECO: Number(p.preco || 0),
 
-    return { products: mappedProducts, isFromApi: true };
+        IMAGEM_URL:
+          p.imagem && p.imagem.length > 50
+            ? `data:image/jpeg;base64,${p.imagem}`
+            : '/placeholder.png'
+      }))
 
+      todosProdutos.push(...produtosFormatados)
+    }
+
+    return { products: todosProdutos, isFromApi: true }
   } catch (error) {
-    // Se falhar (CORS ou Servidor Down), usamos o Mock silenciosamente mas avisamos o App
-    console.warn("Conexão direta com ERP bloqueada (CORS) ou servidor offline. Usando modo de demonstração.");
-    return { products: MOCK_PRODUCTS, isFromApi: false };
-  }
-};
+    console.warn('Erro ao buscar da API própria. Usando modo demo.')
 
+    return { products: MOCK_PRODUCTS, isFromApi: false }
+  }
+}
+
+// ==========================
+// MOCK (fallback apenas)
+// ==========================
 const MOCK_PRODUCTS: Product[] = [
-  { ID: 'M1', DESCRICAO: 'Torta de Chocolate Belga', CATEGORIA: 'TORTAS', PRECO: 85.00, IMAGEM_URL: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400' },
-  { ID: 'M2', DESCRICAO: 'Torta de Morango com Chantilly', CATEGORIA: 'TORTAS', PRECO: 78.00, IMAGEM_URL: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=400' },
-  { ID: 'M3', DESCRICAO: 'Lasanha Quatro Queijos (1kg)', CATEGORIA: 'MASSAS', PRECO: 52.00, IMAGEM_URL: 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=400' },
-  { ID: 'M4', DESCRICAO: 'Fettuccine ao Pesto', CATEGORIA: 'MASSAS', PRECO: 45.00, IMAGEM_URL: 'https://images.unsplash.com/photo-1645112481338-358090598944?w=400' },
-  { ID: 'M5', DESCRICAO: 'Café Espresso Gourmet', CATEGORIA: 'CAFÉS', PRECO: 12.00, IMAGEM_URL: 'https://images.unsplash.com/photo-1510972527921-ce03766a1cf1?w=400' },
-  { ID: 'M6', DESCRICAO: 'Cappuccino Italiano', CATEGORIA: 'CAFÉS', PRECO: 15.00, IMAGEM_URL: 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=400' },
-];
+  {
+    ID: 'M1',
+    DESCRICAO: 'Produto Demo',
+    CATEGORIA: 'DEMO',
+    PRECO: 10.0,
+    IMAGEM_URL: '/placeholder.png'
+  }
+]
